@@ -322,7 +322,8 @@ func main() {
 			DB:       0, // use default DB
 		})
 
-		log.Infof("server listening on port %d\n", bindPort)
+		updateNetpol(rdb)
+
 		router := mux.NewRouter()
 		router.HandleFunc("/", handleIndex).Methods("GET")
 		router.Handle("/block", redisHandler(rdb, handleGetBlocklist)).Methods("GET")
@@ -335,6 +336,8 @@ func main() {
 			WriteTimeout: 30 * time.Second,
 			ReadTimeout:  30 * time.Second,
 		}
+
+		log.Infof("server listening on port %d\n", bindPort)
 		log.Fatal(srv.ListenAndServe())
 		return nil
 	}
