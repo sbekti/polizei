@@ -24,14 +24,14 @@ import (
 )
 
 var (
-	bindAddr   string
-	bindPort   int
-	redisAddr  string
-	redisPwd   string
-	kubeconfig string
-	netpolNs   string
-	netpolName string
-	logLevel   string
+	bindAddr    string
+	bindPort    int
+	redisAddr   string
+	redisPwd    string
+	kubeconfig  string
+	redisSuffix string
+	netpolName  string
+	logLevel    string
 
 	ctx = context.Background()
 
@@ -89,7 +89,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetBlocklist(c *redis.Client, w http.ResponseWriter, r *http.Request) {
-	key := "polizei:" + netpolNs
+	key := "polizei:" + redisSuffix
 	members := c.SMembers(ctx, key)
 	if members.Err() != nil {
 		log.Errorf("handleGetBlocklist: failed to get members of set %s in redis: %s\n", key, members.Err())
@@ -130,7 +130,7 @@ func handleBlock(c *redis.Client, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := "polizei:" + netpolNs
+	key := "polizei:" + redisSuffix
 	err = c.SAdd(ctx, key, mbr.CIDR).Err()
 	if err != nil {
 		log.Errorf("handleBlock: Failed to add CIDR %s to set %s in redis: %s\n", mbr.CIDR, key, err)
@@ -169,7 +169,7 @@ func handleUnblock(c *redis.Client, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := "polizei:" + netpolNs
+	key := "polizei:" + redisSuffix
 	err = c.SRem(ctx, key, mbr.CIDR).Err()
 	if err != nil {
 		log.Errorf("handleUnblock: Failed to remove CIDR %s from set %s in redis: %s\n", mbr.CIDR, key, err)
@@ -192,7 +192,7 @@ func handleUnblock(c *redis.Client, w http.ResponseWriter, r *http.Request) {
 }
 
 func updateNetpol(c *redis.Client) {
-	key := "polizei:" + netpolNs
+	key := "polizei:" + redisSuffix
 	members := c.SMembers(ctx, key)
 	if members.Err() != nil {
 		log.Errorf("updateNetpol: failed to get members of set %s in redis: %s\n", key, members.Err())
@@ -205,9 +205,9 @@ func updateNetpol(c *redis.Client) {
 		return
 	}
 
-	cnp, err := ciliumClient.CiliumV2().CiliumNetworkPolicies(netpolNs).Get(context.TODO(), netpolName, metav1.GetOptions{})
+	cnp, err := ciliumClient.CiliumV2().CiliumClusterwideNetworkPolicies().Get(context.TODO(), netpolName, metav1.GetOptions{})
 	if err != nil {
-		log.Errorf("updateNetpol: failed to get cilium netpol %s in namespace %s: %s\n", netpolName, netpolNs, err)
+		log.Errorf("updateNetpol: failed to get cilium netpol %s: %s\n", netpolName, err)
 		return
 	}
 
@@ -224,9 +224,9 @@ func updateNetpol(c *redis.Client) {
 
 	cnp.Spec.IngressDeny = []api.IngressDenyRule{ingDenyRule}
 
-	_, err = ciliumClient.CiliumV2().CiliumNetworkPolicies(netpolNs).Update(context.TODO(), cnp, metav1.UpdateOptions{})
+	_, err = ciliumClient.CiliumV2().CiliumClusterwideNetworkPolicies().Update(context.TODO(), cnp, metav1.UpdateOptions{})
 	if err != nil {
-		log.Errorf("updateNetpol: failed to update cilium netpol %s in namespace %s: %s\n", netpolName, netpolNs, err)
+		log.Errorf("updateNetpol: failed to update cilium netpol %s: %s\n", netpolName, err)
 		return
 	}
 
@@ -280,11 +280,11 @@ func main() {
 			Destination: &kubeconfig,
 		},
 		cli.StringFlag{
-			Name:        "netpol-ns",
+			Name:        "redis-suffix",
 			Value:       "default",
-			Usage:       "netpol namespace",
-			EnvVar:      "NETPOL_NS",
-			Destination: &netpolNs,
+			Usage:       "redis key suffix namespace",
+			EnvVar:      "REDIS_SUFFIX",
+			Destination: &redisSuffix,
 		},
 		cli.StringFlag{
 			Name:        "netpol-name",
